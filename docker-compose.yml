@@ -1,0 +1,311 @@
+version: '3'
+services:
+  # delugevpn:
+  #   container_name: delugevpn
+  #   image: binhex/arch-delugevpn
+  #   cap_add: 
+  #     - NET_ADMIN
+  #   ports: 
+  #     - '8112:8112'
+  #     - '8118:8118'
+  #     - '58846:58846'
+  #     - '58946:58946'
+  #   depends_on:
+  #     - nginx
+  #   volumes:
+  #     - ${DOWNLOAD_PATH}:/downloads
+  #     - ${CONFIG_PATH}/delugevpn:/config
+  #     - /etc/localtime:/etc/localtime:ro
+  #   environment:
+  #     - TZ=${TZ}
+  #     - PUID=${PUID}
+  #     - PGID=${PGID}
+  #   env_file:
+  #     - delugevpn.env
+  #   networks:
+  #     - proxy
+
+  swag:
+    container_name: swag
+    image: linuxserver/swag
+    cap_add: 
+      - NET_ADMIN
+    ports:
+      - '443:443'
+    volumes:
+     - /etc/localtime:/etc/localtime:ro
+     - ${CONFIG_PATH}/swag:/config
+     - ${CONFIG_PATH}/organizr:/database
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - EMAIL=${NGINX_EMAIL}
+      - URL=${NGINX_URL}
+      - VALIDATION=${NGINX_VALIDATION}
+      - DNSPLUGIN=${NGINX_DNSPLUGIN}
+    networks:
+      - proxy
+
+  organizr:
+    container_name: organizr
+    image: organizr/organizr
+    ports:
+      - '80:80'
+    volumes:
+     - ${CONFIG_PATH}/organizr:/config
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  nzbget:
+    image: linuxserver/nzbget
+    container_name: nzbget
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    volumes:
+      - ${CONFIG_PATH}/nzbget/config:/config
+      - ${DOWNLOAD_PATH}:/downloads
+    ports:
+      - 6789:6789
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  plex:
+    container_name: plex
+    image: plexinc/pms-docker
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIG_PATH}/plex/config:/config
+      - ${CONFIG_PATH}/plex/transcode:/transcode
+      - ${DATA_PATH}:/data
+    environment:
+      - PLEX_CLAIM=${PLEX_CLAIM}
+      - ADVERTISE_IP=${PLEX_ADVERTISE_IP}
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    devices:
+      - /dev/dri:/dev/dri
+    privileged: true
+    restart: unless-stopped
+    hostname: master
+    ports:
+      - '32400:32400/tcp'
+      - '3005:3005/tcp'
+      - '8324:8324/tcp'
+      - '32469:32469/tcp'
+      - '1900:1900/udp'
+      - '32410:32410/udp'
+      - '32412:32412/udp'
+      - '32413:32413/udp'
+      - '32414:32414/udp'
+    networks:
+      - proxy
+
+  sonarr:
+    container_name: sonarr
+    image: linuxserver/sonarr
+    depends_on:
+      - nzbget
+    ports:
+      - 8989:8989
+    volumes:
+      - ${CONFIG_PATH}/sonarr:/config
+      - ${TV_PATH}:/tv
+      - ${DOWNLOAD_PATH}:/downloads
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  radarr:
+    container_name: radarr
+    image: linuxserver/radarr
+    depends_on:
+      - nzbget
+    ports:
+      - 7878:7878
+    volumes:
+      - ${CONFIG_PATH}/radarr:/config
+      - ${MOVIES_PATH}:/movies
+      - ${DOWNLOAD_PATH}:/downloads
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    restart: unless-stopped
+    networks:
+      - proxy
+      
+  jackett:
+    container_name: jackett
+    image: linuxserver/jackett
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    ports:
+      - 9117:9117
+    volumes:
+      - ${CONFIG_PATH}/jackett:/config
+      - ${DOWNLOAD_PATH}:/downloads
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  ombi:
+    container_name: ombi
+    image: linuxserver/ombi
+    ports:
+      - '3579:3579'
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIG_PATH}/ombi:/config
+    environment:
+      - HOME=/config
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+    restart: unless-stopped
+    networks:
+      - proxy
+
+  portainer:
+    container_name: portainer
+    image: portainer/portainer
+    ports:
+      - '9000:9000'
+    environment:
+      - HTTPS_PROXY=${PORTAINER_HTTPS_PROXY}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${CONFIG_PATH}/portainer:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+    networks:
+      - proxy
+      
+  glances:
+    image: docker.io/nicolargo/glances
+    container_name: glances
+    ports:
+      - "61208-61209:61208-61209"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - GLANCES_OPT=-w
+    pid: "host"
+    restart: unless-stopped
+    networks:
+      - proxy
+  
+  speedtest:
+    image: henrywhitaker3/speedtest-tracker
+    container_name: speedtest
+    ports:
+      - 8765:80
+    volumes:
+      - ${CONFIG_PATH}/speedtest:/config
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - OOKLA_EULA_GDPR=true
+      - BASE_PATH=/speedtest      
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "10"
+        max-size: "200k"
+    restart: unless-stopped
+    networks:
+      - proxy
+      
+  netdata:
+    image: netdata/netdata
+    container_name: netdata
+    hostname: cube.alluvium.com
+    ports:
+      - 19999:19999
+    restart: unless-stopped
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    environment:
+      - DOCKER_HOST=docker_socket_proxy:2375
+    volumes:
+      - netdataconfig:/etc/netdata
+      - netdatalib:/var/lib/netdata
+      - netdatacache:/var/cache/netdata
+      - /etc/passwd:/host/etc/passwd:ro
+      - /etc/group:/host/etc/group:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /etc/os-release:/host/etc/os-release:ro
+    networks:
+      - proxy
+
+  docker_socket_proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: docker_socket_proxy
+    volumes:
+     - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+    networks:
+      - proxy
+
+  cells:
+    image: linuxserver/pydio-cells
+    container_name: cells
+    hostname: cells
+    environment:
+      - TZ=${TZ}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - EXTERNALURL=${EXTERNAL_URL}
+    volumes:
+      - ${CONFIG_PATH}/cells:/config
+      - ${DATA_PATH}/cells:/data
+    ports:
+      - 8080:8080
+      - 33060:33060 #optional
+    restart: unless-stopped
+
+  cells-mysql:
+    image: mysql:5.7
+    restart: always
+    ports: 
+      - 3306:3306
+    environment:
+      MYSQL_ROOT_PASSWORD: ${CELLS_MYSQL_ROOT}
+      MYSQL_DATABASE: ${CELLS_MYSQL_DBNAME}
+      MYSQL_USER: ${CELLS_MYSQL_USER}
+      MYSQL_PASSWORD: ${CELLS_MYSQL_PASSWORD}
+    command: [mysqld, --character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci]
+    volumes:
+      - ${CONFIG_PATH}/pydio-cells/mysql:/var/lib/mysql
+
+volumes:
+  netdataconfig:
+  netdatalib:
+  netdatacache:
+
+networks:
+  proxy:
